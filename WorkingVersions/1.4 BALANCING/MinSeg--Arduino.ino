@@ -40,7 +40,6 @@ int time = 0;
 double h = 20000;
 int pos = 0;
 int u = 0;
-int counter = 0;
 //double L1 = 0, L2 = 400000, L3 = 70, L4 = 2000000;
 //double scaler =1.2, L1 = 0.40*scaler, L2 = 500000*scaler, L3 = 70*scaler, L4 = 2200000*scaler; // 10 sekunder
 //double scaler =1.2, L1 = 0.20*scaler, L2 = 800000*scaler, L3 = 75*scaler, L4 = 2300000*scaler; // 20 sekunder
@@ -93,12 +92,6 @@ void loop() {
   if(abs(kalAngleX + angleOffset) > 30){
     stopMotor();
   }
-  /*if(counter%2000 < 1000){
-    pos += 2;
-  }else{
-    pos -=2;
-  }
-  ++counter;*/
   int tempTimer2 = micros();
   //Serial.print(tempTimer2 - tempTimer); Serial.print("\t");
   delayMicroseconds(h - (tempTimer2 - tempTimer));
