@@ -31,18 +31,16 @@ uint8_t i2cData[14]; // Buffer for I2C data
 /*
    Small letters are actual small letters. Capslock is an int-representation
    Protocol:
-      To receive a position:               p -> NEW_POS
+      To receive a position:               p ->
       To receive speed:                    s -> SPEED
-      To receive new L-values and scaler:  l -> 
+      To receive new L-values and scaler:  l ->
 
 
    The Serial port used for bluetooth is Serial3
-
-   A delta of 1000 in position translates to about 75 cm
 */
 
 /*
-   __________________________________________
+   _________________________________________
 */
 
 
@@ -56,9 +54,11 @@ uint8_t i2cData[14]; // Buffer for I2C data
 
 int time = 0;
 double h = 20000;
-bool speedMode = false, positionMode = false;
-double pos = 0, speed = 1, distanceTravelled = 0, newPos = 0;
+double pos = 0, newPos = 0, posChange = 0;
+int speed = 100;
 int u = 0;
+int counter = 0;
+
 //double L1 = 0, L2 = 400000, L3 = 70, L4 = 2000000;
 //double scaler =1.2, L1 = 0.40*scaler, L2 = 500000*scaler, L3 = 70*scaler, L4 = 2200000*scaler; // 10 sekunder
 //double scaler =1.2, L1 = 0.20*scaler, L2 = 800000*scaler, L3 = 75*scaler, L4 = 2300000*scaler; // 20 sekunder
@@ -72,12 +72,15 @@ double encoderTimer, oldEncoderTimer;
 double angleVelocity, angleOffset = 92.9; //To set zero in equilibrium. Lower towards battery
 boolean goingForward = false;
 
+
 void setup() {
   setupPins();
   setupInterrupts();
   setupMPU6050();
+  Serial.begin(115200);
   Serial3.begin(9600);
-  Serial3.println("Setup done");
+  Serial.println("Setup done - 1");
+  Serial3.println("Setup done - 3");
 }
 
 void setupPins() {
@@ -94,19 +97,12 @@ void setupInterrupts() {
 
 void loop() {
   int tempTimer = micros();
-  oldKalAngleX = kalAngleX;
   getAngle();
   getAngleVel();
-  checkBT();
-  setSpeed();
+  changePos();
   calcU();
   runMotors();
-  /*
-    Serial.print(pos); Serial.print("\t");
-    Serial.print(velocity, 14); Serial.println('\t');
-    Serial.print();
-  */
-  //Serial.print(kalAngleX); Serial.print("\t");
+  checkBT();
   if (abs(kalAngleX + angleOffset) > 30) {
     stopMotor();
   }
@@ -120,15 +116,9 @@ void checkBT() {
     switch (Serial3.read()) {
       case 'p':
         newPos = readInt();
-        digitalWrite(LED, LOW);
-        speedMode = false;
-        positionMode = true;
         break;
       case 's':
-        speed = readInt()/100.0;
-        digitalWrite(LED, HIGH);
-        speedMode = true;
-        positionMode = false;
+        speed = readInt();
         break;
       case 'l':
         break;
@@ -138,27 +128,18 @@ void checkBT() {
         }
         break;
     }
-    Serial3.print("Speed: ");
-    Serial3.println(speed*100);
-    Serial3.print("Goal position: ");
-    Serial3.println(newPos);
-    Serial3.print("Actual position: ");
-    Serial3.println(distanceTravelled);
   }
 }
 
-void setSpeed() {
-  if (positionMode) {
-    if (distanceTravelled < newPos) {
-      pos += abs(speed);
-      distanceTravelled += abs(speed);
-    } else if (distanceTravelled > newPos) {
-      pos -= abs(speed);
-      distanceTravelled -= abs(speed);
+void changePos() {
+  if (abs(posChange - newPos) > 10) {
+    if (posChange < newPos) {
+      posChange += speed / 100.0;
+      pos += speed / 100.0;
+    } else if (posChange > newPos) {
+      posChange -= speed / 100.0;
+      pos -= speed / 100.0;
     }
-  }else if(speedMode){
-    pos += speed;
-    distanceTravelled += speed;
   }
 }
 
@@ -168,13 +149,13 @@ void calcU() {
   }
   oldVelocity = velocity;
   u = (int)(L1 * pos + L2 * velocity + L3 * (kalAngleX + angleOffset) + L4 * angleVelocity);
-  /*
+  
     Serial.print(L1 * pos, 14); Serial.print('\t');
     Serial.print(L2 * velocity, 14); Serial.print('\t');
     Serial.print(L3 * (kalAngleX + angleOffset), 14); Serial.print('\t');
     Serial.print(L4 * angleVelocity, 14); Serial.print('\t');
     Serial.print(saturate(u)); Serial.println('\t');
-  */
+  
 }
 
 /*
@@ -188,36 +169,13 @@ int readInt() {
   return s.toInt();
 }
 
-void simpleControl() {
-  /*if(abs(angle) > (PI/2)){
-    stopMotor();
-    return;
-    }
-    if(angle*180.0/PI > 6){
-    goingForward = true;
-    } else{
-    goingForward = false;
-    }
-    if(goingForward){
-    forward();
-    //Serial.println("forward");
-    }else{
-    backward();
-    //Serial.println("backward");
-    }*/
-}
-
 void runMotors() {
   if (u < 0) {
-    //u -= 50;
     u = saturate(u);
     forward(-u);
-    //forward();
   } else {
-    //u += 50;
     u = saturate(u);
     backward(u);
-    //backward();
   }
 }
 
@@ -233,21 +191,25 @@ int saturate(int i) {
 void forward() {
   digitalWrite(MOTOR_PIN_B, LOW);
   digitalWrite(MOTOR_PIN_F, HIGH);
+  digitalWrite(LED, HIGH);
 }
 
 void forward(int speed) {
   digitalWrite(MOTOR_PIN_B, LOW);
   analogWrite(MOTOR_PIN_F, speed);
+  digitalWrite(LED, HIGH);
 }
 
 void backward() {
   digitalWrite(MOTOR_PIN_F, LOW);
   digitalWrite(MOTOR_PIN_B, HIGH);
+  digitalWrite(LED, LOW);
 }
 
 void backward(int speed) {
   digitalWrite(MOTOR_PIN_F, LOW);
   analogWrite(MOTOR_PIN_B, speed);
+  digitalWrite(LED, LOW);
 }
 
 void stopMotor() {
@@ -269,9 +231,11 @@ void readEncoder() {
   }
 }
 
+void getAngleVel() {
+  angleVelocity = (kalAngleX - oldKalAngleX) / h;
+}
 
 void setupMPU6050() {
-  Serial.begin(115200);
   Wire.begin();
   TWBR = ((F_CPU / 400000L) - 16) / 2; // Set I2C frequency to 400kHz
 
@@ -284,7 +248,6 @@ void setupMPU6050() {
 
   while (i2cRead(0x75, i2cData, 1));
   if (i2cData[0] != 0x68) { // Read "WHO_AM_I" register
-    Serial.print(F("Error reading sensor"));
     while (1);
   }
 
@@ -319,6 +282,8 @@ void setupMPU6050() {
 
 
 void getAngle() {
+  /* Save old value*/
+  oldKalAngleX = kalAngleX;
   /* Update all the values */
   while (i2cRead(0x3B, i2cData, 14));
   accX = ((i2cData[0] << 8) | i2cData[1]);
@@ -424,10 +389,6 @@ void getAngle() {
   delay(2);
 }
 
-void getAngleVel() {
-  angleVelocity = (kalAngleX - oldKalAngleX) / h;
-  //Serial.print(angleVelocity, 14); Serial.print('\t');
-}
 
 
 
